@@ -17,7 +17,8 @@
 //   - a path ending in .png: writes that file
 //   - OUTPUT_DIR env var is honoured when no argument is given.
 
-import { copyFileSync, mkdirSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,4 +47,17 @@ if (outputBytes !== sourceBytes) {
     `Copy mismatch: wrote ${outputBytes} bytes, expected ${sourceBytes} bytes from ${source}`,
   );
 }
-console.log(`Wrote ${outputPath} (${outputBytes} bytes)`);
+
+// Equal size is necessary but not sufficient — a same-length file could
+// still differ in content. Compare SHA-256 digests so a corrupted or
+// truncated-but-padded copy also fails loudly instead of shipping.
+const digest = (path) =>
+  createHash("sha256").update(readFileSync(path)).digest("hex");
+const sourceDigest = digest(source);
+const outputDigest = digest(outputPath);
+if (outputDigest !== sourceDigest) {
+  throw new Error(
+    `Copy mismatch: sha256 of ${outputPath} is ${outputDigest}, expected ${sourceDigest} from ${source}`,
+  );
+}
+console.log(`Wrote ${outputPath} (${outputBytes} bytes, sha256 ${outputDigest})`);
